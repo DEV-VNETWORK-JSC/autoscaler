@@ -244,46 +244,26 @@ func (n *NodeGroup) Debug() string {
 
 // Nodes returns a list of all nodes that belong to this node group
 func (n *NodeGroup) Nodes() ([]cloudprovider.Instance, error) {
-	var instanceIDs []string
-
 	// Get instance IDs from the machines API
 	ctx := context.Background()
-	var apiErr error
-	instanceIDs, apiErr = n.client.ListNodePoolInstances(ctx, n.id)
+	instanceIDs, apiErr := n.client.ListNodePoolInstances(ctx, n.id)
 	if apiErr != nil {
-		klog.V(2).Infof("Failed to get instances from machines API: %v", apiErr)
-		instanceIDs = []string{} // Use final fallback
-	} else {
-		klog.V(4).Infof("Using machines API response: %d instances", len(instanceIDs))
+		// Surface the error instead of fabricating synthetic instance IDs. Generated IDs
+		// (<group>-instance-<i>) never match the real providerIDs, so they corrupt the
+		// autoscaler's node<->group mapping and can trigger spurious scale-down churn on a
+		// transient /machines API blip. On error the CA keeps its last-known cloud state.
+		return nil, fmt.Errorf("failed to list instances for node group %s: %v", n.id, apiErr)
 	}
 
-	var result []cloudprovider.Instance
-
-	// If we got actual instance IDs, use them
-	if len(instanceIDs) > 0 {
-		klog.V(4).Infof("Using %d actual instance IDs for node group %s", len(instanceIDs), n.id)
-		for _, instanceID := range instanceIDs {
-			result = append(result, cloudprovider.Instance{
-				Id:     toProviderID(instanceID),
-				Status: &cloudprovider.InstanceStatus{State: cloudprovider.InstanceRunning},
-			})
-		}
-	} else {
-		// Final fallback: create instances based on target size with generated IDs
-		klog.V(4).Infof("Using final fallback for node group %s", n.id)
-		for i := 0; i < n.targetSize; i++ {
-			instanceID := fmt.Sprintf("%s-instance-%d", n.id, i)
-			result = append(result, cloudprovider.Instance{
-				Id:     toProviderID(instanceID),
-				Status: &cloudprovider.InstanceStatus{State: cloudprovider.InstanceRunning},
-			})
-		}
+	result := make([]cloudprovider.Instance, 0, len(instanceIDs))
+	for _, instanceID := range instanceIDs {
+		result = append(result, cloudprovider.Instance{
+			Id:     toProviderID(instanceID),
+			Status: &cloudprovider.InstanceStatus{State: cloudprovider.InstanceRunning},
+		})
 	}
 
 	klog.V(4).Infof("Node group %s returning %d instances", n.id, len(result))
-	for _, instance := range result {
-		klog.V(5).Infof("  Instance: %s", instance.Id)
-	}
 	return result, nil
 }
 
