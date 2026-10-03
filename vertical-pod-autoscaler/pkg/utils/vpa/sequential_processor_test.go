@@ -19,11 +19,10 @@ package api
 import (
 	"testing"
 
-	v1 "k8s.io/api/core/v1"
+	"github.com/stretchr/testify/assert"
+	corev1 "k8s.io/api/core/v1"
 
 	vpa_types "k8s.io/autoscaler/vertical-pod-autoscaler/pkg/apis/autoscaling.k8s.io/v1"
-
-	"github.com/stretchr/testify/assert"
 )
 
 type fakeProcessor struct {
@@ -31,7 +30,7 @@ type fakeProcessor struct {
 }
 
 func (p *fakeProcessor) Apply(vpa *vpa_types.VerticalPodAutoscaler,
-	pod *v1.Pod) (*vpa_types.RecommendedPodResources, ContainerToAnnotationsMap, error) {
+	pod *corev1.Pod) (*vpa_types.RecommendedPodResources, ContainerToAnnotationsMap, error) {
 	result := vpa.Status.Recommendation
 	result.ContainerRecommendations[0].ContainerName += p.message
 	containerToAnnotationsMap := ContainerToAnnotationsMap{"trace": []string{p.message}}

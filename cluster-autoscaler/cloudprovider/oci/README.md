@@ -70,7 +70,7 @@ Note: This is available to use with OKE Node Pools or OCI Managed Instance Pools
 
 See the [documentation](https://docs.oracle.com/en-us/iaas/Content/ContEng/Tasks/contenggrantingworkloadaccesstoresources.htm) for more details
 
-When using a mix of nodes, make sure to add proper lables and affinities on the cluster-autoscaler deployment to prevent it from being deployed on non-OCI managed nodes.
+When using a mix of nodes, make sure to add proper labels and affinities on the cluster-autoscaler deployment to prevent it from being deployed on non-OCI managed nodes.
 
 ```
 Allow any-user to manage cluster-node-pools in compartment <compartment name> where ALL {request.principal.type='workload', request.principal.namespace ='<namespace>', request.principal.service_account = 'cluster-autoscaler', request.principal.cluster_id = 'ocid1.cluster.oc1....'}
@@ -167,9 +167,16 @@ use-instance-principals = true
 n/a
 
 ### Node Group Auto Discovery
-`--node-group-auto-discovery` could be given in below pattern. It would discover the nodepools under given compartment by matching the nodepool tags (either they are Freeform or Defined tags). All of the parameters are mandatory.
+`--node-group-auto-discovery` could be given via the below patterns. It would discover the nodepools or instancepools under given compartment by matching the tags (either they are Freeform or Defined tags). All of the parameters are mandatory.
+
+#### Nodepools
 ```
 clusterId:<clusterId>,compartmentId:<compartmentId>,nodepoolTags:<tagKey1>=<tagValue1>&<tagKey2>=<tagValue2>,min:<min>,max:<max>
+```
+
+#### Instancepools
+```
+compartmentId:<compartmentId>,instancepoolTags:<tagKey1>=<tagValue1>&<tagKey2>=<tagValue2>,min:<min>,max:<max>
 ```
 Auto discovery can not be used along with static discovery (`node` parameter) to prevent conflicts.
 

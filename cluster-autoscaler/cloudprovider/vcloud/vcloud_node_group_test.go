@@ -17,6 +17,7 @@ limitations under the License.
 package vcloud
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"strings"
@@ -37,13 +38,13 @@ func TestNodeGroup_BasicProperties(t *testing.T) {
 	}
 
 	// Test MinSize
-	if ng.MinSize() != 1 {
-		t.Errorf("Expected MinSize 1, got %d", ng.MinSize())
+	if ng.MinSize(context.Background()) != 1 {
+		t.Errorf("Expected MinSize 1, got %d", ng.MinSize(context.Background()))
 	}
 
 	// Test MaxSize
-	if ng.MaxSize() != 10 {
-		t.Errorf("Expected MaxSize 10, got %d", ng.MaxSize())
+	if ng.MaxSize(context.Background()) != 10 {
+		t.Errorf("Expected MaxSize 10, got %d", ng.MaxSize(context.Background()))
 	}
 
 	// Test TargetSize (use stored value since no client)
@@ -57,7 +58,7 @@ func TestNodeGroup_BasicProperties(t *testing.T) {
 	}
 
 	// Test Debug
-	debug := ng.Debug()
+	debug := ng.Debug(context.Background())
 	if !strings.Contains(debug, "test-pool-id") {
 		t.Errorf("Debug string should contain node group ID, got: %s", debug)
 	}
@@ -76,7 +77,7 @@ func TestNodeGroup_Autoprovisioned(t *testing.T) {
 	}
 
 	// VCloud node groups are not autoprovisioned - they're managed manually
-	if ng.Autoprovisioned() {
+	if ng.Autoprovisioned(context.Background()) {
 		t.Error("Expected Autoprovisioned() to return false")
 	}
 }
@@ -525,12 +526,12 @@ func TestDeleteNodes_ValidationChecks(t *testing.T) {
 	}
 
 	// Verify the node group properties for improved DeleteNodes implementation
-	if ng.MinSize() != 2 {
-		t.Errorf("Expected MinSize 2, got %d", ng.MinSize())
+	if ng.MinSize(context.Background()) != 2 {
+		t.Errorf("Expected MinSize 2, got %d", ng.MinSize(context.Background()))
 	}
 
-	if ng.MaxSize() != 10 {
-		t.Errorf("Expected MaxSize 10, got %d", ng.MaxSize())
+	if ng.MaxSize(context.Background()) != 10 {
+		t.Errorf("Expected MaxSize 10, got %d", ng.MaxSize(context.Background()))
 	}
 
 	// This test validates that the DeleteNodes implementation follows
@@ -551,13 +552,13 @@ func TestNodeGroup_IncreaseSize(t *testing.T) {
 	}
 
 	// Test negative delta first (validated before API call)
-	err := ng.IncreaseSize(-1)
+	err := ng.IncreaseSize(context.Background(), -1)
 	if err == nil {
 		t.Error("IncreaseSize should fail for negative delta")
 	}
 
 	// Test zero delta (validated before API call)
-	err = ng.IncreaseSize(0)
+	err = ng.IncreaseSize(context.Background(), 0)
 	if err == nil {
 		t.Error("IncreaseSize should fail for zero delta")
 	}
@@ -579,13 +580,13 @@ func TestNodeGroup_DecreaseTargetSize(t *testing.T) {
 	}
 
 	// Test positive delta (should fail - this is validated first)
-	err := ng.DecreaseTargetSize(2)
+	err := ng.DecreaseTargetSize(context.Background(), 2)
 	if err == nil {
 		t.Error("DecreaseTargetSize should fail for positive delta")
 	}
 
 	// Test negative delta (correct usage) - should succeed
-	err = ng.DecreaseTargetSize(-2)
+	err = ng.DecreaseTargetSize(context.Background(), -2)
 	if err != nil {
 		t.Errorf("DecreaseTargetSize should succeed for negative delta, got error: %v", err)
 	}
@@ -610,7 +611,7 @@ func TestNodeGroup_Exist(t *testing.T) {
 	}
 
 	// Exist() always returns true in the current implementation
-	if !ng.Exist() {
+	if !ng.Exist(context.Background()) {
 		t.Error("Expected Exist() to return true")
 	}
 }
@@ -628,7 +629,7 @@ func TestNodeGroup_TemplateNodeInfo(t *testing.T) {
 		instanceType: "v2g-standard-4-8",
 	}
 
-	nodeInfo, err := ng.TemplateNodeInfo()
+	nodeInfo, err := ng.TemplateNodeInfo(context.Background())
 	if err != nil {
 		t.Errorf("TemplateNodeInfo should not return error, got: %v", err)
 	}
@@ -708,7 +709,7 @@ func TestNodeGroup_TemplateNodeInfo_ProductionInstanceType(t *testing.T) {
 		instanceType: "v2g-standard-8-16", // Actual production instance type
 	}
 
-	nodeInfo, err := ng.TemplateNodeInfo()
+	nodeInfo, err := ng.TemplateNodeInfo(context.Background())
 	if err != nil {
 		t.Errorf("TemplateNodeInfo should not return error, got: %v", err)
 	}

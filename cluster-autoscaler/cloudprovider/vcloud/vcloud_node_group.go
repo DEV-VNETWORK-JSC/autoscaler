@@ -25,10 +25,10 @@ import (
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
-	"k8s.io/autoscaler/cluster-autoscaler/config"
-	"k8s.io/autoscaler/cluster-autoscaler/simulator/framework"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/cluster-autoscaler/pkg/cloudprovider"
+	"sigs.k8s.io/cluster-autoscaler/pkg/config"
+	"sigs.k8s.io/cluster-autoscaler/pkg/simulator/framework"
 )
 
 const (
@@ -51,38 +51,37 @@ type NodeGroup struct {
 }
 
 // MaxSize returns maximum size of the node group
-func (n *NodeGroup) MaxSize() int {
+func (n *NodeGroup) MaxSize(ctx context.Context) int {
 	return n.maxSize
 }
 
 // MinSize returns minimum size of the node group
-func (n *NodeGroup) MinSize() int {
+func (n *NodeGroup) MinSize(ctx context.Context) int {
 	return n.minSize
 }
 
 // TargetSize returns the current target size of the node group
-func (n *NodeGroup) TargetSize() (int, error) {
+func (n *NodeGroup) TargetSize(ctx context.Context) (int, error) {
 	return n.targetSize, nil
 }
 
 // IncreaseSize increases the size of the node group
-func (n *NodeGroup) IncreaseSize(delta int) error {
+func (n *NodeGroup) IncreaseSize(ctx context.Context, delta int) error {
 	if delta <= 0 {
 		return fmt.Errorf("delta must be positive, have: %d", delta)
 	}
 
-	currentSize, err := n.TargetSize()
+	currentSize, err := n.TargetSize(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current size: %v", err)
 	}
 
 	targetSize := currentSize + delta
-	if targetSize > n.MaxSize() {
+	if targetSize > n.MaxSize(ctx) {
 		return fmt.Errorf("size increase is too large. current: %d desired: %d max: %d",
-			currentSize, targetSize, n.MaxSize())
+			currentSize, targetSize, n.MaxSize(ctx))
 	}
 
-	ctx := context.Background()
 	err = n.client.ScaleNodePool(ctx, n.id, targetSize)
 	if err != nil {
 		return fmt.Errorf("failed to create instances: %v", err)
@@ -94,30 +93,29 @@ func (n *NodeGroup) IncreaseSize(delta int) error {
 }
 
 // AtomicIncreaseSize is not implemented
-func (n *NodeGroup) AtomicIncreaseSize(delta int) error {
+func (n *NodeGroup) AtomicIncreaseSize(ctx context.Context, delta int) error {
 	return cloudprovider.ErrNotImplemented
 }
 
 // DeleteNodes deletes nodes from this node group.
 // This implementation follows the common pattern used by other cloud providers
 // by deleting individual instances rather than scaling the pool.
-func (n *NodeGroup) DeleteNodes(nodes []*apiv1.Node) error {
-	ctx := context.Background()
+func (n *NodeGroup) DeleteNodes(ctx context.Context, nodes []*apiv1.Node) error {
 
 	// Validate minimum size constraint before attempting any deletions
-	currentSize, err := n.TargetSize()
+	currentSize, err := n.TargetSize(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current size: %v", err)
 	}
 
 	newSize := currentSize - len(nodes)
-	if newSize < n.MinSize() {
+	if newSize < n.MinSize(ctx) {
 		return fmt.Errorf("cannot delete %d nodes: would violate minimum size constraint (min: %d, current: %d, after deletion: %d)",
-			len(nodes), n.MinSize(), currentSize, newSize)
+			len(nodes), n.MinSize(ctx), currentSize, newSize)
 	}
 
 	// Validate that all nodes belong to this node group
-	nodeInstances, err := n.Nodes()
+	nodeInstances, err := n.Nodes(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get node group instances: %v", err)
 	}
@@ -172,8 +170,7 @@ func (n *NodeGroup) DeleteNodes(nodes []*apiv1.Node) error {
 
 // ForceDeleteNodes deletes nodes from the group regardless of constraints.
 // This implementation follows the common pattern used by other cloud providers.
-func (n *NodeGroup) ForceDeleteNodes(nodes []*apiv1.Node) error {
-	ctx := context.Background()
+func (n *NodeGroup) ForceDeleteNodes(ctx context.Context, nodes []*apiv1.Node) error {
 
 	// Extract instance IDs from nodes
 	var instancesToDelete []string
@@ -201,7 +198,7 @@ func (n *NodeGroup) ForceDeleteNodes(nodes []*apiv1.Node) error {
 	}
 
 	// Update local state to reflect forced deletions (like DigitalOcean)
-	currentSize, _ := n.TargetSize()
+	currentSize, _ := n.TargetSize(ctx)
 	newTargetSize := currentSize - deletedCount
 	n.targetSize = newTargetSize
 	klog.Infof("Force deleted %d nodes from node group %s (new target size: %d)", deletedCount, n.id, newTargetSize)
@@ -210,20 +207,20 @@ func (n *NodeGroup) ForceDeleteNodes(nodes []*apiv1.Node) error {
 }
 
 // DecreaseTargetSize decreases the target size of the node group
-func (n *NodeGroup) DecreaseTargetSize(delta int) error {
+func (n *NodeGroup) DecreaseTargetSize(ctx context.Context, delta int) error {
 	if delta >= 0 {
 		return fmt.Errorf("delta must be negative, have: %d", delta)
 	}
 
-	currentSize, err := n.TargetSize()
+	currentSize, err := n.TargetSize(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get current size: %v", err)
 	}
 
 	targetSize := currentSize + delta
-	if targetSize < n.MinSize() {
+	if targetSize < n.MinSize(ctx) {
 		return fmt.Errorf("size decrease is too small. current: %d desired: %d min: %d",
-			currentSize, targetSize, n.MinSize())
+			currentSize, targetSize, n.MinSize(ctx))
 	}
 
 	// Update local state (like DigitalOcean)
@@ -237,15 +234,14 @@ func (n *NodeGroup) Id() string {
 }
 
 // Debug returns a string containing all information regarding this node group
-func (n *NodeGroup) Debug() string {
+func (n *NodeGroup) Debug(ctx context.Context) string {
 	return fmt.Sprintf("vcloud node group %s (cluster: %s, min: %d, max: %d, target: %d)",
 		n.id, n.clusterID, n.minSize, n.maxSize, n.targetSize)
 }
 
 // Nodes returns a list of all nodes that belong to this node group
-func (n *NodeGroup) Nodes() ([]cloudprovider.Instance, error) {
+func (n *NodeGroup) Nodes(ctx context.Context) ([]cloudprovider.Instance, error) {
 	// Get instance IDs from the machines API
-	ctx := context.Background()
 	instanceIDs, apiErr := n.client.ListNodePoolInstances(ctx, n.id)
 	if apiErr != nil {
 		// Surface the error instead of fabricating synthetic instance IDs. Generated IDs
@@ -268,7 +264,7 @@ func (n *NodeGroup) Nodes() ([]cloudprovider.Instance, error) {
 }
 
 // TemplateNodeInfo returns a framework.NodeInfo structure of an empty node
-func (n *NodeGroup) TemplateNodeInfo() (*framework.NodeInfo, error) {
+func (n *NodeGroup) TemplateNodeInfo(ctx context.Context) (*framework.NodeInfo, error) {
 	// Use cached instance type information to avoid API calls during scaling simulation
 	// This is critical for performance during cluster autoscaler operation
 	instanceType := n.getCachedInstanceType()
@@ -325,7 +321,7 @@ func (n *NodeGroup) TemplateNodeInfo() (*framework.NodeInfo, error) {
 	}
 
 	// Create NodeInfo with the node and kube-proxy pod (standard for cluster autoscaler)
-	nodeInfo := framework.NewNodeInfo(node, nil, &framework.PodInfo{Pod: cloudprovider.BuildKubeProxy(n.id)})
+	nodeInfo := framework.NewNodeInfo(node, nil, framework.NewPodInfo(cloudprovider.BuildKubeProxy(n.id), nil))
 
 	klog.V(4).Infof("Created template node info for node group %s: CPU=%d, Memory=%dGi, InstanceType=%s",
 		n.id, cpu, memory/(1024*1024*1024), instanceType)
@@ -334,27 +330,27 @@ func (n *NodeGroup) TemplateNodeInfo() (*framework.NodeInfo, error) {
 }
 
 // Exist checks if the node group really exists on the cloud provider side
-func (n *NodeGroup) Exist() bool {
+func (n *NodeGroup) Exist(ctx context.Context) bool {
 	return true
 }
 
 // Create creates the node group on the cloud provider side
-func (n *NodeGroup) Create() (cloudprovider.NodeGroup, error) {
+func (n *NodeGroup) Create(ctx context.Context) (cloudprovider.NodeGroup, error) {
 	return nil, cloudprovider.ErrNotImplemented
 }
 
 // Delete deletes the node group on the cloud provider side
-func (n *NodeGroup) Delete() error {
+func (n *NodeGroup) Delete(ctx context.Context) error {
 	return cloudprovider.ErrNotImplemented
 }
 
 // Autoprovisioned returns true if the node group is autoprovisioned
-func (n *NodeGroup) Autoprovisioned() bool {
+func (n *NodeGroup) Autoprovisioned(ctx context.Context) bool {
 	return false
 }
 
 // GetOptions returns NodeGroupAutoscalingOptions for this node group
-func (n *NodeGroup) GetOptions(defaults config.NodeGroupAutoscalingOptions) (*config.NodeGroupAutoscalingOptions, error) {
+func (n *NodeGroup) GetOptions(ctx context.Context, defaults config.NodeGroupAutoscalingOptions) (*config.NodeGroupAutoscalingOptions, error) {
 	_ = defaults // Unused parameter, but required by interface
 	return nil, cloudprovider.ErrNotImplemented
 }

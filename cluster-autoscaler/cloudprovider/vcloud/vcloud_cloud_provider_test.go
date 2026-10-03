@@ -17,6 +17,7 @@ limitations under the License.
 package vcloud
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -24,7 +25,7 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
+	"sigs.k8s.io/cluster-autoscaler/pkg/cloudprovider"
 )
 
 // mockManager creates a test manager with predefined node groups
@@ -86,8 +87,8 @@ func TestVcloudCloudProvider_Name(t *testing.T) {
 	provider := newVcloudCloudProvider(manager, nil)
 
 	name := provider.Name()
-	if name != cloudprovider.VcloudProviderName {
-		t.Errorf("Expected provider name %s, got %s", cloudprovider.VcloudProviderName, name)
+	if name != ProviderName {
+		t.Errorf("Expected provider name %s, got %s", ProviderName, name)
 	}
 }
 
@@ -96,7 +97,7 @@ func TestVcloudCloudProvider_NodeGroups(t *testing.T) {
 	manager := mockManager()
 	provider := newVcloudCloudProvider(manager, nil)
 
-	nodeGroups := provider.NodeGroups()
+	nodeGroups := provider.NodeGroups(context.Background())
 	if len(nodeGroups) != 2 {
 		t.Errorf("Expected 2 node groups, got %d", len(nodeGroups))
 	}
@@ -127,7 +128,7 @@ func TestVcloudCloudProvider_NodeGroupForNode(t *testing.T) {
 
 	// Since we don't have a real API implementation,
 	// this will timeout and return nil (expected behavior for mock)
-	nodeGroup, err := provider.NodeGroupForNode(node)
+	nodeGroup, err := provider.NodeGroupForNode(context.Background(), node)
 	if err != nil {
 		// Expected to fail with network error since we're using a mock API URL
 		t.Logf("Expected network error with mock API: %v", err)
@@ -146,7 +147,7 @@ func TestVcloudCloudProvider_NodeGroupForNode(t *testing.T) {
 		},
 	}
 
-	nodeGroup, err = provider.NodeGroupForNode(invalidNode)
+	nodeGroup, err = provider.NodeGroupForNode(context.Background(), invalidNode)
 	if err != nil {
 		t.Logf("Expected error for invalid provider ID: %v", err)
 	}
@@ -169,7 +170,7 @@ func TestVcloudCloudProvider_HasInstance(t *testing.T) {
 		},
 	}
 
-	hasInstance, err := provider.HasInstance(node)
+	hasInstance, err := provider.HasInstance(context.Background(), node)
 	if err != cloudprovider.ErrNotImplemented {
 		t.Errorf("Expected ErrNotImplemented, got %v", err)
 	}
@@ -183,7 +184,7 @@ func TestVcloudCloudProvider_Pricing(t *testing.T) {
 	manager := mockManager()
 	provider := newVcloudCloudProvider(manager, nil)
 
-	pricing, err := provider.Pricing()
+	pricing, err := provider.Pricing(context.Background())
 	if err != cloudprovider.ErrNotImplemented {
 		t.Errorf("Expected ErrNotImplemented, got %v", err)
 	}
@@ -197,7 +198,7 @@ func TestVcloudCloudProvider_GetAvailableMachineTypes(t *testing.T) {
 	manager := mockManager()
 	provider := newVcloudCloudProvider(manager, nil)
 
-	machineTypes, err := provider.GetAvailableMachineTypes()
+	machineTypes, err := provider.GetAvailableMachineTypes(context.Background())
 	if err != nil {
 		t.Errorf("GetAvailableMachineTypes should not return error, got: %v", err)
 	}
@@ -211,7 +212,7 @@ func TestVcloudCloudProvider_NewNodeGroup(t *testing.T) {
 	manager := mockManager()
 	provider := newVcloudCloudProvider(manager, nil)
 
-	nodeGroup, err := provider.NewNodeGroup("test-machine-type", nil, nil, nil, nil)
+	nodeGroup, err := provider.NewNodeGroup(context.Background(), "test-machine-type", nil, nil, nil, nil)
 	if err != cloudprovider.ErrNotImplemented {
 		t.Errorf("Expected ErrNotImplemented, got %v", err)
 	}
@@ -226,7 +227,7 @@ func TestVcloudCloudProvider_GetResourceLimiter(t *testing.T) {
 	resourceLimiter := &cloudprovider.ResourceLimiter{}
 	provider := newVcloudCloudProvider(manager, resourceLimiter)
 
-	rl, err := provider.GetResourceLimiter()
+	rl, err := provider.GetResourceLimiter(context.Background())
 	if err != nil {
 		t.Errorf("GetResourceLimiter should not return error, got: %v", err)
 	}
@@ -240,7 +241,7 @@ func TestVcloudCloudProvider_GPULabel(t *testing.T) {
 	manager := mockManager()
 	provider := newVcloudCloudProvider(manager, nil)
 
-	gpuLabel := provider.GPULabel()
+	gpuLabel := provider.GPULabel(context.Background())
 	if gpuLabel != GPULabel {
 		t.Errorf("Expected GPU label %s, got %s", GPULabel, gpuLabel)
 	}
@@ -251,7 +252,7 @@ func TestVcloudCloudProvider_GetAvailableGPUTypes(t *testing.T) {
 	manager := mockManager()
 	provider := newVcloudCloudProvider(manager, nil)
 
-	gpuTypes := provider.GetAvailableGPUTypes()
+	gpuTypes := provider.GetAvailableGPUTypes(context.Background())
 	if gpuTypes != nil {
 		t.Error("Expected nil GPU types")
 	}
@@ -268,7 +269,7 @@ func TestVcloudCloudProvider_GetNodeGpuConfig(t *testing.T) {
 		},
 	}
 
-	gpuConfig := provider.GetNodeGpuConfig(node)
+	gpuConfig := provider.GetNodeGpuConfig(context.Background(), node)
 	// This should call the gpu utility function, exact behavior depends on node labels
 	if gpuConfig != nil {
 		t.Logf("GPU config returned: %+v", gpuConfig)
@@ -280,7 +281,7 @@ func TestVcloudCloudProvider_Cleanup(t *testing.T) {
 	manager := mockManager()
 	provider := newVcloudCloudProvider(manager, nil)
 
-	err := provider.Cleanup()
+	err := provider.Cleanup(context.Background())
 	if err != nil {
 		t.Errorf("Cleanup should not return error, got: %v", err)
 	}
@@ -293,7 +294,7 @@ func TestVcloudCloudProvider_Refresh(t *testing.T) {
 
 	// Since we don't have a real API, this will likely fail with connection error
 	// but we can test that the method is called
-	err := provider.Refresh()
+	err := provider.Refresh(context.Background())
 	if err != nil {
 		// Expected to fail since we're using a mock manager without real API
 		t.Logf("Refresh failed as expected with mock manager: %v", err)

@@ -19,8 +19,8 @@ limitations under the License.
 package versioned
 
 import (
-	"fmt"
-	"net/http"
+	fmt "fmt"
+	http "net/http"
 
 	autoscalingv1 "k8s.io/autoscaler/cluster-autoscaler/apis/provisioningrequest/client/clientset/versioned/typed/autoscaling.x-k8s.io/v1"
 	autoscalingv1beta1 "k8s.io/autoscaler/cluster-autoscaler/apis/provisioningrequest/client/clientset/versioned/typed/autoscaling.x-k8s.io/v1beta1"
@@ -30,7 +30,7 @@ import (
 )
 
 type Interface interface {
-	Discovery() discovery.DiscoveryInterface
+	Discovery() discovery.DiscoveryInterfaces
 	AutoscalingV1() autoscalingv1.AutoscalingV1Interface
 	AutoscalingV1beta1() autoscalingv1beta1.AutoscalingV1beta1Interface
 }
@@ -53,7 +53,7 @@ func (c *Clientset) AutoscalingV1beta1() autoscalingv1beta1.AutoscalingV1beta1In
 }
 
 // Discovery retrieves the DiscoveryClient
-func (c *Clientset) Discovery() discovery.DiscoveryInterface {
+func (c *Clientset) Discovery() discovery.DiscoveryInterfaces {
 	if c == nil {
 		return nil
 	}

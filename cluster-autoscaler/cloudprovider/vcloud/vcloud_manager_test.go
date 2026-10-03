@@ -435,7 +435,7 @@ func TestEnhancedManager_Refresh(t *testing.T) {
 		},
 	}
 
-	err := manager.Refresh()
+	err := manager.Refresh(context.Background())
 	if err != nil {
 		t.Fatalf("Refresh failed: %v", err)
 	}
@@ -450,7 +450,7 @@ func TestEnhancedManager_Refresh(t *testing.T) {
 		if ng.clusterID != "test-cluster-123" {
 			t.Errorf("Expected cluster ID 'test-cluster-123', got '%s'", ng.clusterID)
 		}
-		if ng.MinSize() == 0 && ng.MaxSize() == 0 {
+		if ng.MinSize(context.Background()) == 0 && ng.MaxSize(context.Background()) == 0 {
 			t.Error("Node group should have non-zero min/max sizes for autoscaling")
 		}
 	}
@@ -494,7 +494,7 @@ func TestEnhancedManager_GetNodeGroupForInstance(t *testing.T) {
 	nodeGroup.manager = manager
 
 	// Test with non-existent instance
-	nodeGroup, err := manager.GetNodeGroupForInstance("vcloud://non-existent-instance")
+	nodeGroup, err := manager.GetNodeGroupForInstance(context.Background(), "vcloud://non-existent-instance")
 	if err == nil {
 		t.Error("Expected error for non-existent instance")
 	}

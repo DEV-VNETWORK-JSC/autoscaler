@@ -579,8 +579,7 @@ func (c *VCloudAPIClient) DeleteInstance(ctx context.Context, nodePoolName, inst
 // Refresh updates the list of node groups by querying the VCloud API.
 // It discovers available node pools and converts them to NodeGroup objects for cluster autoscaler.
 // Only node pools with autoscaling enabled (non-zero min/max sizes) are included.
-func (m *EnhancedManager) Refresh() error {
-	ctx := context.Background()
+func (m *EnhancedManager) Refresh(ctx context.Context) error {
 	klog.V(4).Infof("refreshing VCloud node groups for cluster %s", m.clusterID)
 
 	// Use your proven API to discover node pools
@@ -629,9 +628,9 @@ func (m *EnhancedManager) GetNodeGroups() []*NodeGroup {
 // GetNodeGroupForInstance finds the node group that contains the specified instance.
 // It searches through all managed node groups to find the one containing the given instance ID.
 // Returns an error if the instance is not found in any managed node group.
-func (m *EnhancedManager) GetNodeGroupForInstance(instanceID string) (*NodeGroup, error) {
+func (m *EnhancedManager) GetNodeGroupForInstance(ctx context.Context, instanceID string) (*NodeGroup, error) {
 	for _, ng := range m.nodeGroups {
-		instances, err := ng.Nodes()
+		instances, err := ng.Nodes(ctx)
 		if err != nil {
 			continue
 		}

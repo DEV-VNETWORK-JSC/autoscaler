@@ -17,6 +17,7 @@ limitations under the License.
 package vcloud
 
 import (
+	"context"
 	"io"
 	"os"
 	"sync"
@@ -24,12 +25,24 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/autoscaler/cluster-autoscaler/cloudprovider"
-	"k8s.io/autoscaler/cluster-autoscaler/config"
-	"k8s.io/autoscaler/cluster-autoscaler/utils/errors"
-	"k8s.io/autoscaler/cluster-autoscaler/utils/gpu"
+	"k8s.io/client-go/informers"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/cluster-autoscaler/pkg/cloudprovider"
+	"sigs.k8s.io/cluster-autoscaler/pkg/cloudprovider/builder"
+	coreoptions "sigs.k8s.io/cluster-autoscaler/pkg/core/options"
+	"sigs.k8s.io/cluster-autoscaler/pkg/utils/errors"
+	"sigs.k8s.io/cluster-autoscaler/pkg/utils/gpu"
 )
+
+// ProviderName is the cloud provider name for VCloud
+const ProviderName = "vcloud"
+
+func init() {
+	builder.RegisterCloudProvider(ProviderName, func(opts *coreoptions.AutoscalerOptions, do cloudprovider.NodeGroupDiscoveryOptions, rl *cloudprovider.ResourceLimiter, _ informers.SharedInformerFactory) cloudprovider.CloudProvider {
+		return BuildVcloud(opts, do, rl)
+	})
+	builder.SetDefaultCloudProvider(ProviderName)
+}
 
 var _ cloudprovider.CloudProvider = (*vcloudCloudProvider)(nil)
 
@@ -59,11 +72,11 @@ func newVcloudCloudProvider(manager *EnhancedManager, rl *cloudprovider.Resource
 
 // Name returns name of the cloud provider
 func (v *vcloudCloudProvider) Name() string {
-	return cloudprovider.VcloudProviderName
+	return ProviderName
 }
 
 // NodeGroups returns all node groups configured for this cloud provider
-func (v *vcloudCloudProvider) NodeGroups() []cloudprovider.NodeGroup {
+func (v *vcloudCloudProvider) NodeGroups(ctx context.Context) []cloudprovider.NodeGroup {
 	nodeGroups := make([]cloudprovider.NodeGroup, len(v.manager.nodeGroups))
 	for i, ng := range v.manager.nodeGroups {
 		nodeGroups[i] = ng
@@ -72,7 +85,7 @@ func (v *vcloudCloudProvider) NodeGroups() []cloudprovider.NodeGroup {
 }
 
 // NodeGroupForNode returns the node group for the given node
-func (v *vcloudCloudProvider) NodeGroupForNode(node *apiv1.Node) (cloudprovider.NodeGroup, error) {
+func (v *vcloudCloudProvider) NodeGroupForNode(ctx context.Context, node *apiv1.Node) (cloudprovider.NodeGroup, error) {
 	providerID := node.Spec.ProviderID
 
 	klog.V(5).Infof("checking nodegroup for node with provider ID: %q", providerID)
@@ -118,7 +131,7 @@ func (v *vcloudCloudProvider) NodeGroupForNode(node *apiv1.Node) (cloudprovider.
 
 			// Build cache for all instances
 			for _, group := range v.manager.nodeGroups {
-				nodes, err := group.Nodes()
+				nodes, err := group.Nodes(ctx)
 				if err != nil {
 					klog.V(4).Infof("failed to get nodes for group %q: %v", group.Id(), err)
 					continue
@@ -143,7 +156,7 @@ func (v *vcloudCloudProvider) NodeGroupForNode(node *apiv1.Node) (cloudprovider.
 	if len(v.nodeGroupCache) == 0 && len(v.manager.nodeGroups) > 0 {
 		klog.V(4).Infof("cache empty, falling back to direct search for instance %q", instanceID)
 		for _, group := range v.manager.nodeGroups {
-			nodes, err := group.Nodes()
+			nodes, err := group.Nodes(ctx)
 			if err != nil {
 				klog.V(4).Infof("failed to get nodes for group %q: %v", group.Id(), err)
 				continue
@@ -165,22 +178,23 @@ func (v *vcloudCloudProvider) NodeGroupForNode(node *apiv1.Node) (cloudprovider.
 }
 
 // HasInstance returns whether a given node has a corresponding instance in this cloud provider
-func (v *vcloudCloudProvider) HasInstance(node *apiv1.Node) (bool, error) {
+func (v *vcloudCloudProvider) HasInstance(ctx context.Context, node *apiv1.Node) (bool, error) {
 	return true, cloudprovider.ErrNotImplemented
 }
 
 // Pricing returns pricing model for this cloud provider
-func (v *vcloudCloudProvider) Pricing() (cloudprovider.PricingModel, errors.AutoscalerError) {
+func (v *vcloudCloudProvider) Pricing(ctx context.Context) (cloudprovider.PricingModel, errors.AutoscalerError) {
 	return nil, cloudprovider.ErrNotImplemented
 }
 
 // GetAvailableMachineTypes gets all machine types that can be requested from the cloud provider
-func (v *vcloudCloudProvider) GetAvailableMachineTypes() ([]string, error) {
+func (v *vcloudCloudProvider) GetAvailableMachineTypes(ctx context.Context) ([]string, error) {
 	return []string{}, nil
 }
 
 // NewNodeGroup builds a theoretical node group based on the node definition provided
 func (v *vcloudCloudProvider) NewNodeGroup(
+	ctx context.Context,
 	machineType string,
 	labels map[string]string,
 	systemLabels map[string]string,
@@ -191,32 +205,32 @@ func (v *vcloudCloudProvider) NewNodeGroup(
 }
 
 // GetResourceLimiter returns struct containing limits (max, min) for resources
-func (v *vcloudCloudProvider) GetResourceLimiter() (*cloudprovider.ResourceLimiter, error) {
+func (v *vcloudCloudProvider) GetResourceLimiter(ctx context.Context) (*cloudprovider.ResourceLimiter, error) {
 	return v.resourceLimiter, nil
 }
 
 // GPULabel returns the label added to nodes with GPU resource
-func (v *vcloudCloudProvider) GPULabel() string {
+func (v *vcloudCloudProvider) GPULabel(ctx context.Context) string {
 	return GPULabel
 }
 
 // GetAvailableGPUTypes returns all available GPU types cloud provider supports
-func (v *vcloudCloudProvider) GetAvailableGPUTypes() map[string]struct{} {
+func (v *vcloudCloudProvider) GetAvailableGPUTypes(ctx context.Context) map[string]struct{} {
 	return nil
 }
 
 // GetNodeGpuConfig returns the label, type and resource name for the GPU added to node
-func (v *vcloudCloudProvider) GetNodeGpuConfig(node *apiv1.Node) *cloudprovider.GpuConfig {
-	return gpu.GetNodeGPUFromCloudProvider(v, node)
+func (v *vcloudCloudProvider) GetNodeGpuConfig(ctx context.Context, node *apiv1.Node) *cloudprovider.GpuConfig {
+	return gpu.GetNodeGPUFromCloudProvider(ctx, v, node)
 }
 
 // Cleanup cleans up open resources before the cloud provider is destroyed
-func (v *vcloudCloudProvider) Cleanup() error {
+func (v *vcloudCloudProvider) Cleanup(ctx context.Context) error {
 	return nil
 }
 
 // Refresh is called before every main loop and can be used to dynamically update cloud provider state
-func (v *vcloudCloudProvider) Refresh() error {
+func (v *vcloudCloudProvider) Refresh(ctx context.Context) error {
 	klog.V(4).Info("refreshing VCloud node groups")
 
 	// Invalidate node group cache when refreshing
@@ -225,12 +239,12 @@ func (v *vcloudCloudProvider) Refresh() error {
 	v.nodeGroupCacheTime = time.Time{}
 	v.nodeGroupCacheMutex.Unlock()
 
-	return v.manager.Refresh()
+	return v.manager.Refresh(ctx)
 }
 
 // BuildVcloud builds the VCloud cloud provider
 func BuildVcloud(
-	opts config.AutoscalingOptions,
+	opts *coreoptions.AutoscalerOptions,
 	do cloudprovider.NodeGroupDiscoveryOptions,
 	rl *cloudprovider.ResourceLimiter,
 ) cloudprovider.CloudProvider {

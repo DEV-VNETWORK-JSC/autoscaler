@@ -4,7 +4,7 @@ The External gRPC Cloud Provider provides a plugin system to support out-of-tree
 
 Cluster Autoscaler adds or removes nodes from the cluster by creating or deleting VMs. To separate the autoscaling logic (the same for all clouds) from the API calls required to execute it (different for each cloud), the latter are hidden behind an interface, `CloudProvider`. Each supported cloud has its own implementation in this repository and `--cloud-provider` flag determines which one will be used.
 
-The gRPC Cloud Provider acts as a client for a cloud provider that implements its custom logic separately from the cluster autoscaler, and serves it as a `CloudProvider` gRPC service (similar to the `CloudProvider` interface) without the need to fork this project, follow its development lifecyle, adhere to its rules (e.g. do not use additional external dependencies) or implement the Cluster API.
+The gRPC Cloud Provider acts as a client for a cloud provider that implements its custom logic separately from the cluster autoscaler, and serves it as a `CloudProvider` gRPC service (similar to the `CloudProvider` interface) without the need to fork this project, follow its development lifecycle, adhere to its rules (e.g. do not use additional external dependencies) or implement the Cluster API.
 
 ## Configuration
 
@@ -52,30 +52,7 @@ The `CloudProvider` interface was designed with the assumption that its implemen
 
 ### Code Generation
 
-To regenerate the gRPC code:
-
-1. install `protoc` and `protoc-gen-go-grpc`:
-
-```bash
-go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.31
-go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3
-```
-
-2. import proto dependencies using go modules
-```bash
-go mod vendor 
-```
-
-3. generate gRPC client and server code:
-
-```bash
-protoc \
-  -I ./cluster-autoscaler \
-  -I ./cluster-autoscaler/vendor \
-  --go_out=. \
-  --go-grpc_out=. \
-  ./cluster-autoscaler/cloudprovider/externalgrpc/protos/externalgrpc.proto
-```
+To regenerate the gRPC code, run the `cluster-autoscaler/hack/update-proto.sh` script
 
 ### General considerations
 
